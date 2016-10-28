@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
   implementation of NSH shell as a stream, for use in nsh over MAVLink
 
@@ -122,18 +121,18 @@ int16_t NSHShellStream::read()
     return -1;
 }
 
-int16_t NSHShellStream::available()
+uint32_t NSHShellStream::available()
 {
-    int ret = 0;
+    uint32_t ret = 0;
     if (ioctl(shell_stdin, FIONREAD, (unsigned long)&ret) == OK) {
         return ret;
     }
     return 0;
 }
 
-int16_t NSHShellStream::txspace()
+uint32_t NSHShellStream::txspace()
 {
-    int ret = 0;
+    uint32_t ret = 0;
     if (ioctl(shell_stdout, FIONWRITE, (unsigned long)&ret) == OK) {
         return ret;
     }

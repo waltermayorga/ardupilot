@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -61,7 +60,7 @@ bool AP_Airspeed_PX4::get_differential_pressure(float &pressure)
 
     while (::read(_fd, &report, sizeof(report)) == sizeof(report) &&
            report.timestamp != _last_timestamp) {
-        psum += report.differential_pressure_raw_pa;
+        psum += report.differential_pressure_raw_pa / _psi_range.get();
         tsum += report.temperature;
         count++;
         _last_timestamp = report.timestamp;

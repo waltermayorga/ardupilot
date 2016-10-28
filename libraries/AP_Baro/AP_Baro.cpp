@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -47,6 +46,7 @@ const AP_Param::GroupInfo AP_Baro::var_info[] = {
     // @Increment: 1
     // @ReadOnly: True
     // @Volatile: True
+    // @User: Advanced
     AP_GROUPINFO("ABS_PRESS", 2, AP_Baro, sensors[0].ground_pressure, 0),
 
     // @Param: TEMP
@@ -56,6 +56,7 @@ const AP_Param::GroupInfo AP_Baro::var_info[] = {
     // @Increment: 1
     // @ReadOnly: True
     // @Volatile: True
+    // @User: Advanced
     AP_GROUPINFO("TEMP", 3, AP_Baro, sensors[0].ground_temperature, 0),
 
     // index 4 reserved for old AP_Int8 version in legacy FRAM
@@ -66,12 +67,14 @@ const AP_Param::GroupInfo AP_Baro::var_info[] = {
     // @Description: altitude offset in meters added to barometric altitude. This is used to allow for automatic adjustment of the base barometric altitude by a ground station equipped with a barometer. The value is added to the barometric altitude read by the aircraft. It is automatically reset to 0 when the barometer is calibrated on each reboot or when a preflight calibration is performed.
     // @Units: meters
     // @Increment: 0.1
+    // @User: Advanced
     AP_GROUPINFO("ALT_OFFSET", 5, AP_Baro, _alt_offset, 0),
 
     // @Param: PRIMARY
     // @DisplayName: Primary barometer
     // @Description: This selects which barometer will be the primary if multiple barometers are found
     // @Values: 0:FirstBaro,1:2ndBaro,2:3rdBaro
+    // @User: Advanced
     AP_GROUPINFO("PRIMARY", 6, AP_Baro, _primary_baro, 0),
 
     AP_GROUPEND
@@ -80,18 +83,8 @@ const AP_Param::GroupInfo AP_Baro::var_info[] = {
 /*
   AP_Baro constructor
  */
-AP_Baro::AP_Baro() :
-        _num_drivers(0),
-        _num_sensors(0),
-        _primary(0),
-        _last_altitude_EAS2TAS(0.0f),
-        _EAS2TAS(0.0f),
-        _external_temperature(0.0f),
-        _last_external_temperature_ms(0),
-        _hil_mode(false)
+AP_Baro::AP_Baro()
 {
-    memset(sensors, 0, sizeof(sensors));
-
     AP_Param::setup_object_defaults(this, var_info);
 }
 
@@ -246,6 +239,9 @@ float AP_Baro::get_air_density_ratio(void)
 // note that this relies on read() being called regularly to get new data
 float AP_Baro::get_climb_rate(void)
 {
+    if (_hil.have_alt) {
+        return _hil.climb_rate;
+    }
     // we use a 7 point derivative filter on the climb rate. This seems
     // to produce somewhat reasonable results on real hardware
     return _climb_rate_filter.slope() * 1.0e3f;
@@ -306,23 +302,19 @@ void AP_Baro::init(void)
     _num_drivers = 1;
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5611_I2C
     drivers[0] = new AP_Baro_MS5611(*this,
-        std::move(hal.i2c_mgr->get_device(HAL_BARO_MS5611_I2C_BUS, HAL_BARO_MS5611_I2C_ADDR)),
-        HAL_BARO_MS5611_USE_TIMER);
+        std::move(hal.i2c_mgr->get_device(HAL_BARO_MS5611_I2C_BUS, HAL_BARO_MS5611_I2C_ADDR)));
     _num_drivers = 1;
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5611_SPI
     drivers[0] = new AP_Baro_MS5611(*this,
-        std::move(hal.spi->get_device(HAL_BARO_MS5611_NAME)),
-        true);
+        std::move(hal.spi->get_device(HAL_BARO_MS5611_NAME)));
     _num_drivers = 1;
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5607_I2C
     drivers[0] = new AP_Baro_MS5607(*this,
-        std::move(hal.i2c_mgr->get_device(HAL_BARO_MS5607_I2C_BUS, HAL_BARO_MS5607_I2C_ADDR)),
-        true);
+        std::move(hal.i2c_mgr->get_device(HAL_BARO_MS5607_I2C_BUS, HAL_BARO_MS5607_I2C_ADDR)));
     _num_drivers = 1;
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5637_I2C
     drivers[0] = new AP_Baro_MS5637(*this,
-        std::move(hal.i2c_mgr->get_device(HAL_BARO_MS5637_I2C_BUS, HAL_BARO_MS5637_I2C_ADDR)),
-        true);
+        std::move(hal.i2c_mgr->get_device(HAL_BARO_MS5637_I2C_BUS, HAL_BARO_MS5637_I2C_ADDR)));
     _num_drivers = 1;
 #elif HAL_BARO_DEFAULT == HAL_BARO_QFLIGHT
     drivers[0] = new AP_Baro_QFLIGHT(*this);
@@ -343,10 +335,10 @@ void AP_Baro::init(void)
  */
 void AP_Baro::update(void)
 {
-    if (fabsf(_alt_offset - _alt_offset_active) > 0.1f) {
-        // if there's more than 10cm difference then slowly slew to it via LPF.
-        // The EKF does not like step inputs so this keeps it happy
-        _alt_offset_active = (0.9f*_alt_offset_active) + (0.1f*_alt_offset);
+    if (fabsf(_alt_offset - _alt_offset_active) > 0.01f) {
+        // If there's more than 1cm difference then slowly slew to it via LPF.
+        // The EKF does not like step inputs so this keeps it happy.
+        _alt_offset_active = (0.95f*_alt_offset_active) + (0.05f*_alt_offset);
     } else {
         _alt_offset_active = _alt_offset;
     }
@@ -377,6 +369,12 @@ void AP_Baro::update(void)
             if (sensors[i].alt_ok) {
                 sensors[i].altitude = altitude + _alt_offset_active;
             }
+        }
+        if (_hil.have_alt) {
+            sensors[0].altitude = _hil.altitude;
+        }
+        if (_hil.have_last_update) {
+            sensors[0].last_update_ms = _hil.last_update_ms;
         }
     }
 

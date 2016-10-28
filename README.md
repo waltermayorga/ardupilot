@@ -6,6 +6,8 @@
 
 [![Build Travis](https://travis-ci.org/ArduPilot/ardupilot.svg?branch=master)](https://travis-ci.org/ArduPilot/ardupilot)
 
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/5331/badge.svg)](https://scan.coverity.com/projects/diydrones-ardupilot)
+
 ### The ArduPilot project is made up of: ###
 >>ArduCopter (or APM:Copter) : [code](https://github.com/ArduPilot/ardupilot/tree/master/ArduCopter), [wiki](http://ardupilot.org/copter/index.html)
 
@@ -30,16 +32,6 @@
 ### Contributors ###
 >>[Github statistics](https://github.com/ArduPilot/ardupilot/graphs/contributors)
 
-### Dronecode.org ###
-
->>ArduPilot is part of Dronecode.org, a Linux Foundation collaborative project.
-
->>Dronecode encompasses projects that control flight, enable mission planning, and otherwise make drone flight and advanced functionality possible.
-
->>Dronecode development is done at the project level with coordinating and resource allocation performed by the TSC and the Board.
-
->>For information on the foundation please visit https://www.dronecode.org and https://github.com/Dronecode for further information or contact celder@dronecode.org
-
 ### How To Get Involved ###
 >>The ArduPilot project is open source and we encourage participation and code contributions: [guidelines for contributors to the ardupilot codebase](http://dev.ardupilot.org/wiki/guidelines-for-contributors-to-the-apm-codebase)
 
@@ -61,7 +53,7 @@
 ### Maintainers ###
 >> Ardupilot is comprised of several parts, vehicles and boards. The list below
 >> contains the people that regularly contribute to the project and are responsible
->> for reviewing patches on their specific area. See [CONTRIBUTING.md](CONTRIBUTING.md)
+>> for reviewing patches on their specific area. See [CONTRIBUTING.md](.github/CONTRIBUTING.md)
 >> for more information.
 >>
 >> - [Andrew Tridgell](https://github.com/tridge)
@@ -90,12 +82,8 @@
 >>   - ***Board***: BBBmini
 >> - [Georgii Staroselskii](https://github.com/staroselskii)
 >>   - ***Board***: NavIO
->> - [Víctor Mayoral Vilches](https://github.com/vmayoral)
->>   - ***Board***: Erle-Brain 2
 >> - [Emile Castelnuovo](https://github.com/emilecastelnuovo)
 >>   - ***Board***: VRBrain
->> - [Mike McCauley](#)
->>   - ***Board***: Flymaple
 >> - [Julien BERAUD](https://github.com/jberaud)
 >>   - ***Board***: Bebop & Bebop 2
 >> - [Pritam Ghanghas](https://github.com/pritamghanghas)

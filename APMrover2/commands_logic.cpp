@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Rover.h"
 
 /********************************************************************************/
@@ -30,6 +28,10 @@ bool Rover::start_command(const AP_Mission::Mission_Command& cmd)
 		case MAV_CMD_NAV_RETURN_TO_LAUNCH:
 			do_RTL();
 			break;
+
+        case MAV_CMD_NAV_LOITER_UNLIM:              // Loiter indefinitely
+            do_loiter_unlimited(cmd);
+            break;
 
         // Conditional commands
 		case MAV_CMD_CONDITION_DELAY:
@@ -103,6 +105,10 @@ bool Rover::start_command(const AP_Mission::Mission_Command& cmd)
             break;
 #endif
 
+        case MAV_CMD_DO_SET_REVERSE:
+            do_set_reverse(cmd);
+            break;
+
 		default:
 		    // return false for unhandled commands
 		    return false;
@@ -138,10 +144,15 @@ bool Rover::verify_command_callback(const AP_Mission::Mission_Command& cmd)
     }
     return false;
 }
-/********************************************************************************/
-// Verify command Handlers
-//      Returns true if command complete
-/********************************************************************************/
+
+/*******************************************************************************
+Verify command Handlers
+
+Each type of mission element has a "verify" operation. The verify
+operation returns true when the mission element has completed and we
+should move onto the next mission element.
+Return true if we do not recognize the command so that we move on to the next command
+*******************************************************************************/
 
 bool Rover::verify_command(const AP_Mission::Mission_Command& cmd)
 {
@@ -153,21 +164,37 @@ bool Rover::verify_command(const AP_Mission::Mission_Command& cmd)
 		case MAV_CMD_NAV_RETURN_TO_LAUNCH:
 			return verify_RTL();
 
+        case MAV_CMD_NAV_LOITER_UNLIM:
+            return verify_loiter_unlim();
+
         case MAV_CMD_CONDITION_DELAY:
             return verify_wait_delay();
 
         case MAV_CMD_CONDITION_DISTANCE:
             return verify_within_distance();
 
+        // do commands (always return true)
+        case MAV_CMD_DO_CHANGE_SPEED:
+        case MAV_CMD_DO_SET_HOME:
+        case MAV_CMD_DO_SET_SERVO:
+        case MAV_CMD_DO_SET_RELAY:
+        case MAV_CMD_DO_REPEAT_SERVO:
+        case MAV_CMD_DO_REPEAT_RELAY:
+        case MAV_CMD_DO_CONTROL_VIDEO:
+        case MAV_CMD_DO_DIGICAM_CONFIGURE:
+        case MAV_CMD_DO_DIGICAM_CONTROL:
+        case MAV_CMD_DO_SET_CAM_TRIGG_DIST:
+        case MAV_CMD_DO_SET_ROI:
+        case MAV_CMD_DO_SET_REVERSE:
+            return true;
+
         default:
-            if (cmd.id > MAV_CMD_CONDITION_LAST) {
-                // this is a command that doesn't require verify
-                return true;
-            }
-            gcs_send_text(MAV_SEVERITY_CRITICAL,"Verify conditon. Unsupported command");
+            // error message
+            gcs_send_text_fmt(MAV_SEVERITY_WARNING,"Skipping invalid cmd #%i",cmd.id);
+            // return true if we do not recognize the command so that we move on to the next command
             return true;
 	}
-    return false;
+
 }
 
 /********************************************************************************/
@@ -186,12 +213,21 @@ void Rover::do_nav_wp(const AP_Mission::Mission_Command& cmd)
     // this will be used to remember the time in millis after we reach or pass the WP.
     loiter_time = 0;
     // this is the delay, stored in seconds
-    loiter_time_max = abs(cmd.p1);
+    loiter_time_max = cmd.p1;
 
     // this is the distance we travel past the waypoint - not there yet so 0 initially
     distance_past_wp = 0;
 
 	set_next_WP(cmd.content.location);
+}
+
+void Rover::do_loiter_unlimited(const AP_Mission::Mission_Command& cmd)
+{
+    Location cmdloc = cmd.content.location;
+    location_sanitize(current_loc, cmdloc);
+    set_next_WP(cmdloc);
+    loiter_time_max = 100; // an arbitrary large loiter time
+    distance_past_wp = 0;
 }
 
 /********************************************************************************/
@@ -225,7 +261,7 @@ bool Rover::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
     // We should always go through the waypoint i.e. the above code
     // first before we go past it.
     if (location_passed_point(current_loc, prev_WP, next_WP)) {
-        // check if we have gone futher past the wp then last time and output new message if we have
+        // check if we have gone further past the wp then last time and output new message if we have
         if ((uint32_t)distance_past_wp != (uint32_t)get_distance(current_loc, next_WP)) {
             distance_past_wp = get_distance(current_loc, next_WP);
             gcs_send_text_fmt(MAV_SEVERITY_INFO, "Passed waypoint #%i. Distance %um",
@@ -262,6 +298,36 @@ bool Rover::verify_RTL()
     }
 
     return false;
+}
+
+bool Rover::verify_loiter_unlim()
+{
+    // Continually increase the loiter time so it never finishes
+    loiter_time += loiter_time_max;
+    return false;
+}
+
+void Rover::nav_set_yaw_speed()
+{
+    // if we haven't received a MAV_CMD_NAV_SET_YAW_SPEED message within the last 3 seconds bring the rover to a halt
+    if ((millis() - guided_yaw_speed.msg_time_ms) > 3000)
+    {
+        gcs_send_text(MAV_SEVERITY_WARNING, "NAV_SET_YAW_SPEED not recvd last 3secs, stopping");
+        channel_throttle->set_servo_out(g.throttle_min.get());
+        channel_steer->set_servo_out(0);
+        lateral_acceleration = 0;
+        return;
+    }
+
+    channel_steer->set_servo_out(steerController.get_steering_out_angle_error(guided_yaw_speed.turn_angle));
+
+    // speed param in the message gives speed as a proportion of cruise speed.
+    // 0.5 would set speed to the cruise speed
+    // 1 is double the cruise speed.
+    float target_speed = g.speed_cruise * guided_yaw_speed.target_speed * 2;
+    calc_throttle(target_speed);
+
+    return;
 }
 
 /********************************************************************************/
@@ -380,5 +446,14 @@ void Rover::log_picture()
         if (should_log(MASK_LOG_CAMERA)) {
             DataFlash.Log_Write_Trigger(ahrs, gps, current_loc);
         }      
+    }
+}
+
+void Rover::do_set_reverse(const AP_Mission::Mission_Command& cmd)
+{
+	if (cmd.p1 == 1) {
+        set_reverse(true);
+	} else {
+        set_reverse(false);
     }
 }

@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
  * Copyright (C) 2015  Intel Corporation. All rights reserved.
  *
@@ -70,7 +69,7 @@ public:
      * time a periodic read occurred.
      *
      * This method must be called after the periodic read is configured and
-     * the buffer must be large enough to accomodate the size configured.
+     * the buffer must be large enough to accommodate the size configured.
      *
      * @buf: buffer in which to write the values read
      *

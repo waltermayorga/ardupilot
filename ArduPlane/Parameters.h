@@ -1,4 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 #pragma once
 
 #include <AP_Common/AP_Common.h>
@@ -49,6 +48,9 @@ public:
         k_param_format_version = 0,
         k_param_software_type,
         k_param_num_resets,
+        k_param_NavEKF2,
+        k_param_g2,
+        k_param_avoidance_adsb,
 
         // Misc
         //
@@ -202,7 +204,7 @@ public:
         k_param_NavEKF,  // Extended Kalman Filter Inertial Navigation Group
         k_param_mission, // mission library
         k_param_serial_manager, // serial manager library
-        k_param_NavEKF2,  // EKF2
+        k_param_NavEKF2_old,  // deprecated
         k_param_land_pre_flare_alt,
         k_param_land_pre_flare_airspeed = 149,
 
@@ -300,6 +302,8 @@ public:
         k_param_flight_mode5,
         k_param_flight_mode6,
         k_param_initial_mode,
+        k_param_land_slope_recalc_shallow_threshold,
+        k_param_land_slope_recalc_steep_threshold_to_abort,
 
         //
         // 220: Waypoint data
@@ -317,7 +321,7 @@ public:
 
         // other objects
         k_param_sitl = 230,
-        k_param_obc,
+        k_param_afs,
         k_param_rollController,
         k_param_pitchController,
         k_param_yawController,
@@ -337,6 +341,9 @@ public:
         k_param_pidTeThrottle, // unused
         k_param_pidNavPitchAltitude, // unused
         k_param_pidWheelSteer, // unused
+
+        k_param_mixing_offset,
+        k_param_dspoiler_rud_rate,
 
         k_param_DataFlash = 253, // Logging Group
 
@@ -443,7 +450,6 @@ public:
 
     // Navigational maneuvering limits
     //
-    AP_Int16 roll_limit_cd;
     AP_Int16 alt_offset;
     AP_Int16 acro_roll_rate;
     AP_Int16 acro_pitch_rate;
@@ -460,6 +466,8 @@ public:
     AP_Int8 reverse_elevons;
     AP_Int8 reverse_ch1_elevon;
     AP_Int8 reverse_ch2_elevon;
+    AP_Int16 mixing_offset;
+    AP_Int16 dspoiler_rud_rate;
     AP_Int16 num_resets;
     AP_Int32 log_bitmask;
     AP_Int8 reset_switch_chan;
@@ -472,6 +480,8 @@ public:
     AP_Int8 land_abort_throttle_enable;
     AP_Float land_pre_flare_alt;
     AP_Float land_pre_flare_sec;
+    AP_Float land_slope_recalc_shallow_threshold;
+    AP_Float land_slope_recalc_steep_threshold_to_abort;
     AP_Int32 min_gndspeed_cm;
     AP_Int16 pitch_trim_cd;
     AP_Int16 FBWB_min_altitude_cm;
@@ -557,6 +567,29 @@ public:
         rc_16                                   (CH_16),
         _dummy(0)
         {}
+};
+
+/*
+  2nd block of parameters, to avoid going past 256 top level keys
+ */
+class ParametersG2 {
+public:
+    ParametersG2(void);
+
+    // var_info for holding Parameter information
+    static const struct AP_Param::GroupInfo var_info[];
+
+    // button reporting library
+    AP_Button button;
+
+    // internal combustion engine control
+    AP_ICEngine ice_control;
+
+    // control over servo output ranges
+    SRV_Channels servo_channels;
+
+    // whether to enforce acceptance of packets only from sysid_my_gcs
+    AP_Int8 sysid_enforce;
 };
 
 extern const AP_Param::Info var_info[];

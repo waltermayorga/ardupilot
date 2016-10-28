@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 /* 
    DataFlash logging - file oriented variant
 
@@ -31,14 +29,12 @@
 #include <stdio.h>
 #include <time.h>
 #include <dirent.h>
-#include <AP_HAL/utility/RingBuffer.h>
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__MACH__)
 #include <sys/param.h>
 #include <sys/mount.h>
 #elif !DATAFLASH_FILE_MINIMAL
 #include <sys/statfs.h>
 #endif
-
 extern const AP_HAL::HAL& hal;
 
 #define MAX_LOG_FILES 500U
@@ -60,7 +56,7 @@ DataFlash_File::DataFlash_File(DataFlash_Class &front,
     _open_error(false),
     _log_directory(log_directory),
     _cached_oldest_log(0),
-    _writebuf(NULL),
+    _writebuf(0),
 #if defined(CONFIG_ARCH_BOARD_PX4FMU_V1)
     // V1 gets IO errors with larger than 512 byte writes
     _writebuf_chunk(512),
@@ -79,8 +75,6 @@ DataFlash_File::DataFlash_File(DataFlash_Class &front,
 #else
     _writebuf_chunk(4096),
 #endif
-    _writebuf_head(0),
-    _writebuf_tail(0),
     _last_write_time(0),
     _perf_write(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "DF_write")),
     _perf_fsync(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "DF_fsync")),
@@ -89,7 +83,6 @@ DataFlash_File::DataFlash_File(DataFlash_Class &front,
 {}
 
 
-// initialisation
 void DataFlash_File::Init()
 {
     DataFlash_Backend::Init();
@@ -102,7 +95,7 @@ void DataFlash_File::Init()
         AP_HAL::panic("Failed to create DataFlash_File semaphore");
         return;
     }
-    
+
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4 || CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN
     // try to cope with an existing lowercase log directory
     // name. NuttX does not handle case insensitive VFAT well
@@ -133,37 +126,27 @@ void DataFlash_File::Init()
         return;
     }
 #endif
-    
-    if (_writebuf != NULL) {
-        free(_writebuf);
-        _writebuf = NULL;
-    }
 
     // determine and limit file backend buffersize
-    uint8_t bufsize = _front._params.file_bufsize;
+    uint32_t bufsize = _front._params.file_bufsize;
     if (bufsize > 64) {
-        // we currently use uint16_t for the ringbuffer.  Also,
-        // PixHawk has DMA limitaitons.
-        bufsize = 64;
+        bufsize = 64; // PixHawk has DMA limitations.
     }
-    _writebuf_size = bufsize * 1024;
+    bufsize *= 1024;
 
-    /*
-      if we can't allocate the full writebuf then try reducing it
-      until we can allocate it
-     */
-    while (_writebuf == NULL && _writebuf_size >= _writebuf_chunk) {
-        hal.console->printf("DataFlash_File: buffer size=%u\n", (unsigned)_writebuf_size);
-        _writebuf = (uint8_t *)malloc(_writebuf_size);
-        if (_writebuf == NULL) {
-            _writebuf_size /= 2;
-        }
+    // If we can't allocate the full size, try to reduce it until we can allocate it
+    while (!_writebuf.set_size(bufsize) && bufsize >= _writebuf_chunk) {
+        hal.console->printf("DataFlash_File: Couldn't set buffer size to=%u\n", (unsigned)bufsize);
+        bufsize >>= 1;
     }
-    if (_writebuf == NULL) {
+
+    if (!_writebuf.get_size()) {
         hal.console->printf("Out of memory for logging\n");
-        return;        
+        return;
     }
-    _writebuf_head = _writebuf_tail = 0;
+
+    hal.console->printf("DataFlash_File: buffer size=%u\n", (unsigned)bufsize);
+
     _initialised = true;
     hal.scheduler->register_io_process(FUNCTOR_BIND_MEMBER(&DataFlash_File::_io_timer, void));
 }
@@ -204,13 +187,15 @@ void DataFlash_File::periodic_fullrate(const uint32_t now)
     DataFlash_Backend::push_log_blocks();
 }
 
-uint16_t DataFlash_File::bufferspace_available()
+uint32_t DataFlash_File::bufferspace_available()
 {
-    uint16_t _head;
-    return (BUF_SPACE(_writebuf)) - critical_message_reserved_space();
+    const uint32_t space = _writebuf.space();
+    const uint32_t crit = critical_message_reserved_space();
+
+    return (space > crit) ? space - crit : 0;
 }
 
-// return true for CardInserted() if we successfully initialised
+// return true for CardInserted() if we successfully initialized
 bool DataFlash_File::CardInserted(void)
 {
     return _initialised && !_open_error;
@@ -448,6 +433,7 @@ char *DataFlash_File::_lastlog_file_name(void) const
 void DataFlash_File::EraseAll()
 {
     uint16_t log_num;
+    const bool was_logging = (_write_fd != -1);
     stop_logging();
 #if !DATAFLASH_FILE_MINIMAL
     for (log_num=1; log_num<=MAX_LOG_FILES; log_num++) {
@@ -465,6 +451,10 @@ void DataFlash_File::EraseAll()
     }
 #endif
     _cached_oldest_log = 0;
+
+    if (was_logging) {
+        start_new_log();
+    }
 }
 
 /* Write a block of data at current offset */
@@ -483,8 +473,7 @@ bool DataFlash_File::WritePrioritisedBlock(const void *pBuffer, uint16_t size, b
         return false;
     }
         
-    uint16_t _head;
-    uint16_t space = BUF_SPACE(_writebuf);
+    uint32_t space = _writebuf.space();
 
     if (_writing_startup_messages &&
         _startup_messagewriter->fmt_done()) {
@@ -514,26 +503,7 @@ bool DataFlash_File::WritePrioritisedBlock(const void *pBuffer, uint16_t size, b
         return false;
     }
 
-    if (_writebuf_tail < _head) {
-        // perform as single memcpy
-        assert(((uint32_t)_writebuf_tail)+size <= _writebuf_size);
-        memcpy(&_writebuf[_writebuf_tail], pBuffer, size);
-        BUF_ADVANCETAIL(_writebuf, size);
-    } else {
-        // perform as two memcpy calls
-        uint32_t n = _writebuf_size - _writebuf_tail;
-        if (n > size) n = size;
-        assert(((uint32_t)_writebuf_tail)+n <= _writebuf_size);
-        memcpy(&_writebuf[_writebuf_tail], pBuffer, n);
-        BUF_ADVANCETAIL(_writebuf, n);
-        pBuffer = (const void *)(((const uint8_t *)pBuffer) + n);
-        n = size - n;
-        if (n > 0) {
-            assert(((uint32_t)_writebuf_tail)+n <= _writebuf_size);
-            memcpy(&_writebuf[_writebuf_tail], pBuffer, n);
-            BUF_ADVANCETAIL(_writebuf, n);
-        }
-    }
+    _writebuf.write((uint8_t*)pBuffer, size);
     semaphore->give();
     return true;
 }
@@ -803,7 +773,7 @@ uint16_t DataFlash_File::start_new_log(void)
 {
     stop_logging();
 
-    _startup_messagewriter->reset();
+    start_new_log_reset_variables();
 
     if (_open_error) {
         // we have previously failed to open a file - don't try again
@@ -814,6 +784,12 @@ uint16_t DataFlash_File::start_new_log(void)
     if (_read_fd != -1) {
         ::close(_read_fd);
         _read_fd = -1;
+    }
+
+    if (disk_space_avail() < _free_space_min_avail) {
+        hal.console->printf("Out of space for logging\n");
+        _open_error = true;
+        return 0xffff;
     }
 
     uint16_t log_num = find_last_log();
@@ -844,8 +820,7 @@ uint16_t DataFlash_File::start_new_log(void)
     }
     free(fname);
     _write_offset = 0;
-    _writebuf_head = 0;
-    _writebuf_tail = 0;
+    _writebuf.clear();
     log_write_started = true;
 
     // now update lastlog.txt with the new log number
@@ -861,8 +836,13 @@ uint16_t DataFlash_File::start_new_log(void)
 
     char buf[30];
     snprintf(buf, sizeof(buf), "%u\r\n", (unsigned)log_num);
-    write(fd, buf, strlen(buf));
+    const ssize_t to_write = strlen(buf);
+    const ssize_t written = write(fd, buf, to_write);
     close(fd);
+
+    if (written < to_write) {
+        return 0xFFFF;
+    }
 
     return log_num;
 }
@@ -1018,14 +998,14 @@ void DataFlash_File::ListAvailableLogs(AP_HAL::BetterStream *port)
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL || CONFIG_HAL_BOARD == HAL_BOARD_LINUX
 void DataFlash_File::flush(void)
 {
-    uint16_t _tail;
     uint32_t tnow = AP_HAL::micros();
     hal.scheduler->suspend_timer_procs();
-    while (_write_fd != -1 && _initialised && !_open_error &&
-           BUF_AVAILABLE(_writebuf)) {
+    while (_write_fd != -1 && _initialised && !_open_error && _writebuf.available()) {
         // convince the IO timer that it really is OK to write out
         // less than _writebuf_chunk bytes:
-        _last_write_time = tnow - 2000000;
+        if (tnow > 2000001) { // avoid resetting _last_write_time to 0
+            _last_write_time = tnow - 2000001;
+        }
         _io_timer();
     }
     hal.scheduler->resume_timer_procs();
@@ -1037,12 +1017,11 @@ void DataFlash_File::flush(void)
 
 void DataFlash_File::_io_timer(void)
 {
-    uint16_t _tail;
     if (_write_fd == -1 || !_initialised || _open_error) {
         return;
     }
 
-    uint16_t nbytes = BUF_AVAILABLE(_writebuf);
+    uint32_t nbytes = _writebuf.available();
     if (nbytes == 0) {
         return;
     }
@@ -1053,6 +1032,15 @@ void DataFlash_File::_io_timer(void)
         // least once per 2 seconds if data is available
         return;
     }
+    if (tnow - _free_space_last_check_time > _free_space_check_interval) {
+        _free_space_last_check_time = tnow;
+        if (disk_space_avail() < _free_space_min_avail) {
+            hal.console->printf("Out of space for logging\n");
+            stop_logging();
+            _open_error = true; // prevent logging starting again
+            return;
+        }
+    }
 
     hal.util->perf_begin(_perf_write);
 
@@ -1061,13 +1049,12 @@ void DataFlash_File::_io_timer(void)
         // be kind to the FAT PX4 filesystem
         nbytes = _writebuf_chunk;
     }
-    if (_writebuf_head > _tail) {
-        // only write to the end of the buffer
-        nbytes = MIN(nbytes, _writebuf_size - _writebuf_head);
-    }
 
-    // try to align writes on a 512 byte boundary to avoid filesystem
-    // reads
+    uint32_t size;
+    const uint8_t *head = _writebuf.readptr(size);
+    nbytes = MIN(nbytes, size);
+
+    // try to align writes on a 512 byte boundary to avoid filesystem reads
     if ((nbytes + _write_offset) % 512 != 0) {
         uint32_t ofs = (nbytes + _write_offset) % 512;
         if (ofs < nbytes) {
@@ -1075,8 +1062,7 @@ void DataFlash_File::_io_timer(void)
         }
     }
 
-    assert(((uint32_t)_writebuf_head)+nbytes <= _writebuf_size);
-    ssize_t nwritten = ::write(_write_fd, &_writebuf[_writebuf_head], nbytes);
+    ssize_t nwritten = ::write(_write_fd, head, nbytes);
     if (nwritten <= 0) {
         hal.util->perf_count(_perf_errors);
         close(_write_fd);
@@ -1084,13 +1070,13 @@ void DataFlash_File::_io_timer(void)
         _initialised = false;
     } else {
         _write_offset += nwritten;
+        _writebuf.advance(nwritten);
         /*
-          the best strategy for minimising corruption on microSD cards
+          the best strategy for minimizing corruption on microSD cards
           seems to be to write in 4k chunks and fsync the file on each
           chunk, ensuring the directory entry is updated after each
           write.
          */
-        BUF_ADVANCEHEAD(_writebuf, nwritten);
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL && CONFIG_HAL_BOARD_SUBTYPE != HAL_BOARD_SUBTYPE_LINUX_NONE && CONFIG_HAL_BOARD != HAL_BOARD_QURT
         ::fsync(_write_fd);
 #endif
@@ -1098,5 +1084,28 @@ void DataFlash_File::_io_timer(void)
     hal.util->perf_end(_perf_write);
 }
 
-#endif // HAL_OS_POSIX_IO
+// this sensor is enabled if we should be logging at the moment
+bool DataFlash_File::logging_enabled() const
+{
+    if (hal.util->get_soft_armed() ||
+        _front.log_while_disarmed()) {
+        return true;
+    }
+    return false;
+}
 
+bool DataFlash_File::logging_failed() const
+{
+    if (_write_fd == -1 &&
+        (hal.util->get_soft_armed() ||
+         _front.log_while_disarmed())) {
+        return true;
+    }
+    if (_open_error) {
+        return true;
+    }
+    return false;
+}
+
+
+#endif // HAL_OS_POSIX_IO

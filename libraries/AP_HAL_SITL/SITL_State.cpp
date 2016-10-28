@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include <AP_HAL/AP_HAL.h>
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -63,6 +61,8 @@ void SITL_State::_set_param_default(const char *parm)
  */
 void SITL_State::_sitl_setup(const char *home_str)
 {
+    _home_str = home_str;
+
 #ifndef __CYGWIN__
     _parent_pid = getppid();
 #endif
@@ -80,7 +80,9 @@ void SITL_State::_sitl_setup(const char *home_str)
     _barometer = (AP_Baro *)AP_Param::find_object("GND_");
     _ins = (AP_InertialSensor *)AP_Param::find_object("INS_");
     _compass = (Compass *)AP_Param::find_object("COMPASS_");
+#if AP_TERRAIN_AVAILABLE
     _terrain = (AP_Terrain *)AP_Param::find_object("TERRAIN_");
+#endif
     _optical_flow = (OpticalFlow *)AP_Param::find_object("FLOW");
 
     if (_sitl != NULL) {
@@ -93,9 +95,6 @@ void SITL_State::_sitl_setup(const char *home_str)
 #endif
         if (enable_gimbal) {
             gimbal = new SITL::Gimbal(_sitl->state);
-        }
-        if (enable_ADSB) {
-            adsb = new SITL::ADSB(_sitl->state, home_str);
         }
 
         fg_socket.connect("127.0.0.1", 5503);
@@ -170,6 +169,15 @@ void SITL_State::_fdm_input_step(void)
         _update_barometer(_sitl->state.altitude);
         _update_compass(_sitl->state.rollDeg, _sitl->state.pitchDeg, _sitl->state.yawDeg);
         _update_flow();
+
+        if (_sitl->adsb_plane_count >= 0 &&
+            adsb == nullptr) {
+            adsb = new SITL::ADSB(_sitl->state, _home_str);
+        } else if (_sitl->adsb_plane_count == -1 &&
+                   adsb != nullptr) {
+            delete adsb;
+            adsb = nullptr;
+        }
     }
 
     // trigger all APM timers.
@@ -204,6 +212,10 @@ void SITL_State::_fdm_input(void)
         uint8_t i;
         for (i=0; i<size/2; i++) {
             // setup the pwm input for the RC channel inputs
+            if (i < _sitl->state.rcin_chan_count) {
+                // we're using rc from simulator
+                continue;
+            }
             if (pwm_pkt.pwm[i] != 0) {
                 pwm_input[i] = pwm_pkt.pwm[i];
             }
@@ -268,6 +280,12 @@ void SITL_State::_fdm_input_local(void)
     if (_sitl) {
         sitl_model->fill_fdm(_sitl->state);
         _sitl->update_rate_hz = sitl_model->get_rate_hz();
+
+        if (_sitl->rc_fail == 0) {
+            for (uint8_t i=0; i< _sitl->state.rcin_chan_count; i++) {
+                pwm_input[i] = 1000 + _sitl->state.rcin[i]*1000;
+            }
+        }
     }
 
     if (gimbal != NULL) {
@@ -294,32 +312,6 @@ void SITL_State::_fdm_input_local(void)
 #endif
 
 /*
-  apply servo rate filtering
-  This allows simulation of servo lag
- */
-void SITL_State::_apply_servo_filter(float deltat)
-{
-    if (_sitl == nullptr || _sitl->servo_rate < 1.0f) {
-        // no limit
-        return;
-    }
-    // 1000 usec == 90 degrees
-    uint16_t max_change = deltat * _sitl->servo_rate * 1000 / 90;
-    if (max_change == 0) {
-        max_change = 1;
-    }
-    for (uint8_t i=0; i<SITL_NUM_CHANNELS; i++) {
-        int16_t change = (int16_t)pwm_output[i] - (int16_t)last_pwm_output[i];
-        if (change > max_change) {
-            pwm_output[i] = last_pwm_output[i] + max_change;
-        } else if (change < -max_change) {
-            pwm_output[i] = last_pwm_output[i] - max_change;
-        }
-    }
-}
-
-
-/*
   create sitl_input structure for sending to FDM
  */
 void SITL_State::_simulator_servos(SITL::Aircraft::sitl_input &input)
@@ -341,29 +333,31 @@ void SITL_State::_simulator_servos(SITL::Aircraft::sitl_input &input)
         if (_vehicle == APMrover2) {
             pwm_output[0] = pwm_output[1] = pwm_output[2] = pwm_output[3] = 1500;
         }
-        for (i=0; i<SITL_NUM_CHANNELS; i++) {
-            last_pwm_output[i] = pwm_output[i];
-        }
     }
 
     // output at chosen framerate
     uint32_t now = AP_HAL::micros();
-    float deltat = (now - last_update_usec) * 1.0e-6f;
     last_update_usec = now;
-
-    _apply_servo_filter(deltat);
 
     // pass wind into simulators, using a wind gradient below 60m
     float altitude = _barometer?_barometer->get_altitude():0;
-    float wind_speed = _sitl?_sitl->wind_speed:0;
+    float wind_speed = 0;
+    float wind_direction = 0;
+    if (_sitl) {
+        // The EKF does not like step inputs so this LPF keeps it happy.
+        wind_speed = _sitl->wind_speed_active = (0.95f*_sitl->wind_speed_active) + (0.05f*_sitl->wind_speed);
+        wind_direction = _sitl->wind_direction_active = (0.95f*_sitl->wind_direction_active) + (0.05f*_sitl->wind_direction);
+    }
+
     if (altitude < 0) {
         altitude = 0;
     }
     if (altitude < 60) {
         wind_speed *= sqrtf(MAX(altitude / 60, 0));
     }
+
     input.wind.speed = wind_speed;
-    input.wind.direction = _sitl?_sitl->wind_direction:0;
+    input.wind.direction = wind_direction;
     input.wind.turbulence = _sitl?_sitl->wind_turbulance:0;
 
     for (i=0; i<SITL_NUM_CHANNELS; i++) {
@@ -372,7 +366,6 @@ void SITL_State::_simulator_servos(SITL::Aircraft::sitl_input &input)
         } else {
             input.servos[i] = pwm_output[i];
         }
-        last_pwm_output[i] = pwm_output[i];
     }
 
     float engine_mul = _sitl?_sitl->engine_mul.get():1;
@@ -478,6 +471,7 @@ float SITL_State::height_agl(void)
         home_alt = _sitl->state.altitude;
     }
 
+#if AP_TERRAIN_AVAILABLE
     if (_terrain &&
             _sitl->terrain_enable) {
         // get height above terrain from AP_Terrain. This assumes
@@ -487,10 +481,11 @@ float SITL_State::height_agl(void)
         location.lat = _sitl->state.latitude*1.0e7;
         location.lng = _sitl->state.longitude*1.0e7;
 
-        if (_terrain->height_amsl(location, terrain_height_amsl)) {
+        if (_terrain->height_amsl(location, terrain_height_amsl, false)) {
             return _sitl->state.altitude - terrain_height_amsl;
         }
     }
+#endif
 
     // fall back to flat earth model
     return _sitl->state.altitude - home_alt;

@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Copter.h"
 
 // run_nav_updates - top level call for the autopilot
@@ -7,22 +5,11 @@
 // To-Do - rename and move this function to make it's purpose more clear
 void Copter::run_nav_updates(void)
 {
-    // fetch position from inertial navigation
-    calc_position();
-
     // calculate distance and bearing for reporting and autopilot decisions
     calc_distance_and_bearing();
 
     // run autopilot to make high level decisions about control modes
     run_autopilot();
-}
-
-// calc_position - get lat and lon positions from inertial nav library
-void Copter::calc_position()
-{
-    // pull position from interial nav library
-    current_loc.lng = inertial_nav.get_longitude();
-    current_loc.lat = inertial_nav.get_latitude();
 }
 
 // calc_distance_and_bearing - calculate distance and bearing to next waypoint and home

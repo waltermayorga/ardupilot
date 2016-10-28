@@ -1,11 +1,13 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Tracker.h"
 
-void Tracker::init_barometer(void)
+void Tracker::init_barometer(bool full_calibration)
 {
     gcs_send_text(MAV_SEVERITY_INFO, "Calibrating barometer");
-    barometer.calibrate();
+    if (full_calibration) {
+        barometer.calibrate();
+    } else {
+        barometer.update_calibration();
+    }
     gcs_send_text(MAV_SEVERITY_INFO, "Barometer calibration complete");
 }
 
@@ -104,7 +106,7 @@ void Tracker::update_GPS(void)
             // We countdown N number of good GPS fixes
             // so that the altitude is more accurate
             // -------------------------------------
-            if (current_loc.lat == 0) {
+            if (current_loc.lat == 0 && current_loc.lng == 0) {
                 ground_start_count = 5;
 
             } else {
@@ -114,7 +116,12 @@ void Tracker::update_GPS(void)
                 set_home(current_loc);
 
                 // set system clock for log timestamps
-                hal.util->set_system_clock(gps.time_epoch_usec());
+                uint64_t gps_timestamp = gps.time_epoch_usec();
+                
+                hal.util->set_system_clock(gps_timestamp);
+                
+                // update signing timestamp
+                GCS_MAVLINK::update_signing_timestamp(gps_timestamp);
 
                 if (g.compass_enabled) {
                     // Set compass declination automatically
@@ -126,7 +133,7 @@ void Tracker::update_GPS(void)
 
         // log GPS data
         if (should_log(MASK_LOG_GPS)) {
-            DataFlash.Log_Write_GPS(gps, 0, current_loc.alt);
+            DataFlash.Log_Write_GPS(gps, 0);
         }
     }
 }

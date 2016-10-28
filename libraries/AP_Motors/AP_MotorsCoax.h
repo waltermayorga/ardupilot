@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 /// @file	AP_MotorsCoax.h
 /// @brief	Motor and Servo control class for Co-axial helicopters with two motors and two flaps
 #pragma once
@@ -27,7 +25,7 @@ public:
     /// Constructor
     AP_MotorsCoax(uint16_t loop_rate, uint16_t speed_hz = AP_MOTORS_SPEED_DEFAULT) :
         AP_MotorsMulticopter(loop_rate, speed_hz),
-        _servo1(CH_1), _servo2(CH_2), _servo3(CH_3), _servo4(CH_4)
+        _servo1(CH_NONE), _servo2(CH_NONE), _servo3(CH_NONE), _servo4(CH_NONE)
     {
         AP_Param::setup_object_defaults(this, var_info);
     };

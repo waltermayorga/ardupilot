@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include <AP_HAL/AP_HAL.h>
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4
@@ -15,7 +13,7 @@
 #include "AnalogIn.h"
 #include "Util.h"
 #include "GPIO.h"
-#include "I2CDriver.h"
+#include "I2CDevice.h"
 
 #include <AP_HAL_Empty/AP_HAL_Empty.h>
 #include <AP_HAL_Empty/AP_HAL_Empty_Private.h>
@@ -31,7 +29,6 @@
 
 using namespace PX4;
 
-static PX4I2CDriver i2cDriver;
 static Empty::SPIDeviceManager spiDeviceManager;
 //static Empty::GPIO gpioDriver;
 
@@ -43,7 +40,7 @@ static PX4AnalogIn analogIn;
 static PX4Util utilInstance;
 static PX4GPIO gpioDriver;
 
-static Empty::I2CDeviceManager i2c_mgr_instance;
+static PX4::I2CDeviceManager i2c_mgr_instance;
 
 #if defined(CONFIG_ARCH_BOARD_PX4FMU_V2)
 #define UARTA_DEFAULT_DEVICE "/dev/ttyACM0"
@@ -85,9 +82,6 @@ HAL_PX4::HAL_PX4() :
         &uartEDriver,  /* uartE */
         &uartFDriver,  /* uartF */
         &i2c_mgr_instance,
-        &i2cDriver, /* i2c */
-        NULL,   /* only one i2c */
-        NULL,   /* only one i2c */
         &spiDeviceManager, /* spi */
         &analogIn, /* analogin */
         &storageDriver, /* storage */

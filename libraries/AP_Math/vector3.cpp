@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
  * vector3.cpp
  * Copyright (C) Andrew Tridgell 2012
@@ -273,7 +272,7 @@ T Vector3<T>::operator *(const Vector3<T> &v) const
 template <typename T>
 float Vector3<T>::length(void) const
 {
-    return pythagorous3(x, y, z);
+    return norm(x, y, z);
 }
 
 template <typename T>

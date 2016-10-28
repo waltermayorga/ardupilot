@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -183,7 +182,7 @@ float AP_RSSI::scale_and_constrain_float_rssi(float current_rssi_value, float lo
     if (range_is_inverted)
     {
         // Swap values so we can treat them as low->high uniformly in the code that follows
-        current_rssi_value = high_rssi_range + abs(current_rssi_value - low_rssi_range);
+        current_rssi_value = high_rssi_range + fabsf(current_rssi_value - low_rssi_range);
         std::swap(low_rssi_range, high_rssi_range);        
     }
 

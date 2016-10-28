@@ -1,4 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 #pragma once
 
 #include <AP_Common/AP_Common.h>
@@ -84,6 +83,7 @@ public:
         k_param_steering_learn, // unused
         k_param_NavEKF,  // Extended Kalman Filter Inertial Navigation Group
         k_param_mission, // mission library
+        k_param_NavEKF2_old, // deprecated
         k_param_NavEKF2,
 
         // 140: battery controls
@@ -194,6 +194,7 @@ public:
         k_param_steerController,
         k_param_barometer,
         k_param_notify,
+        k_param_button,
 
         k_param_DataFlash = 253, // Logging Group
 

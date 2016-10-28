@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include <AP_HAL/AP_HAL.h>
 
 #include "AP_NavEKF.h"
@@ -127,7 +125,7 @@ const AP_Param::GroupInfo NavEKF::var_info[] = {
 
     // @Param: VELNE_NOISE
     // @DisplayName: GPS horizontal velocity measurement noise scaler
-    // @Description: This is the scaler that is applied to the speed accuracy reported by the receiver to estimate the horizontal velocity observation noise. If the model of receiver used does not provide a speed accurcy estimate, then a speed acuracy of 1 is assumed. Increasing it reduces the weighting on these measurements.
+    // @Description: This is the scaler that is applied to the speed accuracy reported by the receiver to estimate the horizontal velocity observation noise. If the model of receiver used does not provide a speed accurcy estimate, then a speed accuracy of 1 is assumed. Increasing it reduces the weighting on these measurements.
     // @Range: 0.05 5.0
     // @Increment: 0.05
     // @User: Advanced
@@ -135,7 +133,7 @@ const AP_Param::GroupInfo NavEKF::var_info[] = {
 
     // @Param: VELD_NOISE
     // @DisplayName: GPS vertical velocity measurement noise scaler
-    // @Description: This is the scaler that is applied to the speed accuracy reported by the receiver to estimate the vertical velocity observation noise. If the model of receiver used does not provide a speed accurcy estimate, then a speed acuracy of 1 is assumed. Increasing it reduces the weighting on this measurement.
+    // @Description: This is the scaler that is applied to the speed accuracy reported by the receiver to estimate the vertical velocity observation noise. If the model of receiver used does not provide a speed accurcy estimate, then a speed accuracy of 1 is assumed. Increasing it reduces the weighting on this measurement.
     // @Range: 0.05 5.0
     // @Increment: 0.05
     // @User: Advanced
@@ -333,7 +331,7 @@ const AP_Param::GroupInfo NavEKF::var_info[] = {
 
     // @Param: GND_GRADIENT
     // @DisplayName: Terrain Gradient % RMS
-    // @Description: This parameter sets the RMS terrain gradient percentage assumed by the terrain height estimation. Terrain height can be estimated using optical flow and/or range finder sensor data if fitted. Smaller values cause the terrain height estimate to be slower to respond to changes in measurement. Larger values casue the terrain height estimate to be faster to respond, but also more noisy. Generally this value can be reduced if operating over very flat terrain and increased if operating over uneven terrain.
+    // @Description: This parameter sets the RMS terrain gradient percentage assumed by the terrain height estimation. Terrain height can be estimated using optical flow and/or range finder sensor data if fitted. Smaller values cause the terrain height estimate to be slower to respond to changes in measurement. Larger values cause the terrain height estimate to be faster to respond, but also more noisy. Generally this value can be reduced if operating over very flat terrain and increased if operating over uneven terrain.
     // @Range: 1 50
     // @Increment: 1
     // @User: Advanced
@@ -390,7 +388,7 @@ const AP_Param::GroupInfo NavEKF::var_info[] = {
 
     // @Param: ALT_SOURCE
     // @DisplayName: Primary height source
-    // @Description: This parameter controls which height sensor is used by the EKF during optical flow navigation (when EKF_GPS_TYPE = 3). A value of will 0 cause it to always use baro altitude. A value of 1 will casue it to use range finder if available.
+    // @Description: This parameter controls which height sensor is used by the EKF during optical flow navigation (when EKF_GPS_TYPE = 3). A value of will 0 cause it to always use baro altitude. A value of 1 will cause it to use range finder if available.
     // @Values: 0:Use Baro, 1:Use Range Finder
     // @User: Advanced
     AP_GROUPINFO("ALT_SOURCE",    32, NavEKF, _altSource, 1),
@@ -401,6 +399,8 @@ const AP_Param::GroupInfo NavEKF::var_info[] = {
     // @Bitmask: 0:NSats,1:HDoP,2:speed error,3:horiz pos error,4:yaw error,5:pos drift,6:vert speed,7:horiz speed
     // @User: Advanced
     AP_GROUPINFO("GPS_CHECK",    33, NavEKF, _gpsCheck, 31),
+
+    // **NOTE** index 34 is "Enable" and is at the top for AP_PARAM_FLAG_ENABLE
 
     AP_GROUPEND
 };
@@ -470,15 +470,26 @@ bool NavEKF::healthy(void) const
     return core->healthy();
 }
 
-// Return the last calculated NED position relative to the reference point (m).
+// Write the last calculated North East position relative to the reference point (m).
 // If a calculated solution is not available, use the best available data and return false
 // If false returned, do not use for flight control
-bool NavEKF::getPosNED(Vector3f &pos) const
+bool NavEKF::getPosNE(Vector2f &posNE) const
 {
     if (!core) {
         return false;
     }
-    return core->getPosNED(pos);
+    return core->getPosNE(posNE);
+}
+
+// Write the last calculated Down position relative to the reference point (m).
+// If a calculated solution is not available, use the best available data and return false
+// If false returned, do not use for flight control
+bool NavEKF::getPosD(float &posD) const
+{
+    if (!core) {
+        return false;
+    }
+    return core->getPosD(posD);
 }
 
 // return NED velocity in m/s
@@ -716,7 +727,8 @@ bool NavEKF::use_compass(void) const
 // rawGyroRates are the sensor rotation rates in rad/sec measured by the sensors internal gyro
 // The sign convention is that a RH physical rotation of the sensor about an axis produces both a positive flow and gyro rate
 // msecFlowMeas is the scheduler time in msec when the optical flow data was received from the sensor.
-void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, Vector2f &rawGyroRates, uint32_t &msecFlowMeas)
+// NOTE: AP_NavEKF does not use the posOffset data
+void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, Vector2f &rawGyroRates, uint32_t &msecFlowMeas, const Vector3f &posOffset)
 {
     if (core) {
         core->writeOptFlowMeas(rawFlowQuality, rawFlowRates, rawGyroRates, msecFlowMeas);
@@ -771,7 +783,7 @@ void NavEKF::setTouchdownExpected(bool val)
   7 = badly conditioned synthetic sideslip fusion
   7 = filter is not initialised
 */
-void NavEKF::getFilterFaults(uint8_t &faults) const
+void NavEKF::getFilterFaults(uint16_t &faults) const
 {
     if (core) {
         core->getFilterFaults(faults);

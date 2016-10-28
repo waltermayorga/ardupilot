@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -36,7 +35,6 @@ namespace SITL {
 #pragma GCC diagnostic ignored "-Wunused-result"
 
 #define DEBUG_JSBSIM 1
-#define FEET_TO_METERS 0.3048f
 
 JSBSim::JSBSim(const char *home_str, const char *frame_str) :
     Aircraft(home_str, frame_str),
@@ -182,6 +180,7 @@ bool JSBSim::start_JSBSim(void)
     pid_t child_pid = fork();
     if (child_pid == 0) {
         // in child
+        setsid();
         dup2(devnull, 0);
         dup2(p[1], 1);
         close(p[0]);
@@ -233,6 +232,7 @@ bool JSBSim::start_JSBSim(void)
 
     started_jsbsim = true;
     check_stdout();
+    close(devnull);
     return true;
 }
 
@@ -322,10 +322,10 @@ bool JSBSim::open_fdm_socket(void)
 void JSBSim::send_servos(const struct sitl_input &input)
 {
     char *buf = NULL;
-    float aileron  = (input.servos[0]-1500)/500.0f;
-    float elevator = (input.servos[1]-1500)/500.0f;
-    float throttle = (input.servos[2]-1000)/1000.0;
-    float rudder   = (input.servos[3]-1500)/500.0f;
+    float aileron  = filtered_servo_angle(input, 0);
+    float elevator = filtered_servo_angle(input, 1);
+    float throttle = filtered_servo_range(input, 2);
+    float rudder   = filtered_servo_angle(input, 3);
     if (frame == FRAME_ELEVON) {
         // fake an elevon plane
         float ch1 = aileron;
@@ -422,6 +422,9 @@ void JSBSim::recv_fdm(const struct sitl_input &input)
     airspeed = fdm.vcas * FEET_TO_METERS;
     airspeed_pitot = airspeed;
 
+    // update magnetic field
+    update_mag_field_bf();
+    
     rpm1 = fdm.rpm[0];
     rpm2 = fdm.rpm[1];
     

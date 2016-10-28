@@ -2,7 +2,7 @@
 
 echo "Checking modules"
 
-MODULE_LIST="gbenchmark gtest mavlink PX4Firmware PX4Firmware/src/lib/matrix PX4Firmware/Tools/gencpp PX4Firmware/Tools/genmsg PX4NuttX uavcan uavcan/dsdl uavcan/libuavcan/dsdl_compiler/pyuavcan waf"
+MODULE_LIST="gbenchmark gtest mavlink mavlink/pymavlink PX4Firmware PX4Firmware/src/lib/matrix PX4Firmware/Tools/gencpp PX4Firmware/Tools/genmsg PX4NuttX uavcan uavcan/dsdl uavcan/libuavcan/dsdl_compiler/pyuavcan waf"
 
 NEED_INIT=0
 
@@ -65,7 +65,7 @@ cat <<EOF
 
 You need to run 'git submodule update'
 
-Please see http://dev.ardupilot.com/wiki/git-submodules/
+Please see http://dev.ardupilot.org/wiki/git-submodules/
 EOF
             exit 1
         }

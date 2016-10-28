@@ -9,7 +9,7 @@ public:
 
     virtual void reset() = 0;
     virtual void process() = 0;
-    virtual bool finished() { return _finished; };
+    virtual bool finished() { return _finished; }
 
     virtual void set_dataflash_backend(class DataFlash_Backend *backend) {
         _dataflash_backend = backend;
@@ -80,7 +80,7 @@ public:
 
     void reset();
     void process();
-    bool fmt_done() { return _fmt_done; };
+    bool fmt_done() { return _fmt_done; }
 
     void set_mission(const AP_Mission *mission);
 
@@ -104,8 +104,6 @@ private:
     AP_Param::ParamToken token;
     AP_Param *ap;
     enum ap_var_type type;
-    uint16_t num_format_types;
-    const struct LogStructure *_structures;
 
 
     DFMessageWriter_WriteSysInfo _writesysinfo;

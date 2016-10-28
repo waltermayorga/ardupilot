@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Copter.h"
 
 /*
@@ -38,9 +36,13 @@ void Copter::motor_test_output()
 
             case MOTOR_TEST_THROTTLE_PERCENT:
                 // sanity check motor_test_throttle value
+#if FRAME_CONFIG != HELI_FRAME
                 if (motor_test_throttle_value <= 100) {
-                    pwm = channel_throttle->radio_min + (channel_throttle->radio_max - channel_throttle->radio_min) * (float)motor_test_throttle_value/100.0f;
+                    int16_t pwm_min = motors.get_pwm_output_min();
+                    int16_t pwm_max = motors.get_pwm_output_max();
+                    pwm = pwm_min + (pwm_max - pwm_min) * (float)motor_test_throttle_value/100.0f;
                 }
+#endif
                 break;
 
             case MOTOR_TEST_THROTTLE_PWM:
@@ -48,13 +50,12 @@ void Copter::motor_test_output()
                 break;
 
             case MOTOR_TEST_THROTTLE_PILOT:
-                pwm = channel_throttle->radio_in;
+                pwm = channel_throttle->get_radio_in();
                 break;
 
             default:
                 motor_test_stop();
                 return;
-                break;
         }
 
         // sanity check throttle values

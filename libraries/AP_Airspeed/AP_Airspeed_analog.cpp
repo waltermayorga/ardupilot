@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -42,6 +41,6 @@ bool AP_Airspeed_Analog::get_differential_pressure(float &pressure)
         return false;
     }
     _source->set_pin(_pin);
-    pressure = _source->voltage_average_ratiometric() * VOLTS_TO_PASCAL;
+    pressure = _source->voltage_average_ratiometric() * VOLTS_TO_PASCAL / _psi_range.get();
     return true;
 }

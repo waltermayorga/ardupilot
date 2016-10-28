@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include <AP_HAL/AP_HAL.h>
 
 #if HAL_CPU_CLASS >= HAL_CPU_CLASS_150
@@ -55,7 +53,7 @@ void NavEKF2_core::FuseAirspeed()
     vwe = stateStruct.wind_vel.y;
 
     // calculate the predicted airspeed
-    VtasPred = pythagorous3((ve - vwe) , (vn - vwn) , vd);
+    VtasPred = norm((ve - vwe) , (vn - vwn) , vd);
     // perform fusion of True Airspeed measurement
     if (VtasPred > 1.0f)
     {

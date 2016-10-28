@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -56,7 +55,10 @@ void AP_AccelCal::update()
             case ACCEL_CAL_WAITING_FOR_ORIENTATION: {
                 // if we're waiting for orientation, first ensure that all calibrators are on the same step
                 uint8_t step;
-                cal = get_calibrator(0);
+                if ((cal = get_calibrator(0)) == NULL) {
+                    fail();
+                    return;
+                }
                 step = cal->get_num_samples_collected()+1;
 
                 for(uint8_t i=1 ; (cal = get_calibrator(i))  ; i++) {

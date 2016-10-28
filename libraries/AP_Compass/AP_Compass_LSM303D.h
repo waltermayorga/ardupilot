@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 #pragma once
 
 #include <AP_Common/AP_Common.h>
@@ -14,6 +13,8 @@ class AP_Compass_LSM303D : public AP_Compass_Backend
 public:
     static AP_Compass_Backend *probe(Compass &compass,
                                      AP_HAL::OwnPtr<AP_HAL::Device> dev);
+
+    static constexpr const char *name = "LSM303D";
 
     bool init() override;
     void read() override;

@@ -41,6 +41,8 @@ extern const AP_HAL::HAL& hal;
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO ||    \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2 || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BH || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DARK || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_URUS || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PXFMINI
 #define APM_LINUX_RCIN_RATE             2000
 #define APM_LINUX_TONEALARM_RATE        100
@@ -53,7 +55,7 @@ extern const AP_HAL::HAL& hal;
 
 #define SCHED_THREAD(name_, UPPER_NAME_)                        \
     {                                                           \
-        .name = "sched-" #name_,                                \
+        .name = "ap-" #name_,                                   \
         .thread = &_##name_##_thread,                           \
         .policy = SCHED_FIFO,                                   \
         .prio = APM_LINUX_##UPPER_NAME_##_PRIORITY,             \
@@ -96,7 +98,32 @@ void Scheduler::init()
         const struct sched_table *t = &sched_table[i];
 
         t->thread->set_rate(t->rate);
+        t->thread->set_stack_size(256 * 1024);
         t->thread->start(t->name, t->policy, t->prio);
+    }
+
+#if defined(DEBUG_STACK) && DEBUG_STACK
+    register_timer_process(FUNCTOR_BIND_MEMBER(&Scheduler::_debug_stack, void));
+#endif
+}
+
+void Scheduler::_debug_stack()
+{
+    uint64_t now = AP_HAL::millis64();
+
+    if (now - _last_stack_debug_msec > 5000) {
+        fprintf(stderr, "Stack Usage:\n"
+                "\ttimer = %zu\n"
+                "\tio    = %zu\n"
+                "\trcin  = %zu\n"
+                "\tuart  = %zu\n"
+                "\ttone  = %zu\n",
+                _timer_thread.get_stack_usage(),
+                _io_thread.get_stack_usage(),
+                _rcin_thread.get_stack_usage(),
+                _uart_thread.get_stack_usage(),
+                _tonealarm_thread.get_stack_usage());
+        _last_stack_debug_msec = now;
     }
 }
 
@@ -160,7 +187,7 @@ void Scheduler::register_timer_process(AP_HAL::MemberProc proc)
 bool Scheduler::register_timer_process(AP_HAL::MemberProc proc,
                                        uint8_t freq_div)
 {
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP || CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DISCO
     if (freq_div > 1) {
         return _register_timesliced_proc(proc, freq_div);
     }

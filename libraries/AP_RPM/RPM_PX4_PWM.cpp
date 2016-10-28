@@ -1,4 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -56,6 +55,9 @@ AP_RPM_PX4_PWM::AP_RPM_PX4_PWM(AP_RPM &_ap_rpm, uint8_t instance, AP_RPM::RPM_St
         return;
     }
 
+    _resolution_usec = PWMIN_MINRPM_TO_RESOLUTION(((uint32_t)(ap_rpm._minimum[state.instance]+0.5f)));
+    ioctl(_fd, PWMINIOSRESOLUTION, _resolution_usec);
+    
 #if PWM_LOGGING
     _logfd = open("/fs/microsd/pwm.log", O_WRONLY|O_CREAT|O_TRUNC, 0644);
 #endif
@@ -78,6 +80,12 @@ void AP_RPM_PX4_PWM::update(void)
         return;
     }
 
+    uint32_t newres = PWMIN_MINRPM_TO_RESOLUTION(((uint32_t)(ap_rpm._minimum[state.instance]+0.5f)));
+    if (newres != _resolution_usec) {
+        ioctl(_fd, PWMINIOSRESOLUTION, newres);
+        _resolution_usec = newres;
+    }
+    
     struct pwm_input_s pwm;
     uint16_t count = 0;
     const float scaling = ap_rpm._scaling[state.instance];

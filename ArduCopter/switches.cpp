@@ -1,21 +1,16 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Copter.h"
 
 #define CONTROL_SWITCH_DEBOUNCE_TIME_MS  200
 
 //Documentation of Aux Switch Flags:
-static union {
-    struct {
-        uint8_t CH6_flag            : 2; // 0, 1    // ch6 aux switch : 0 is low or false, 1 is center or true, 2 is high
-        uint8_t CH7_flag            : 2; // 2, 3    // ch7 aux switch : 0 is low or false, 1 is center or true, 2 is high
-        uint8_t CH8_flag            : 2; // 4, 5    // ch8 aux switch : 0 is low or false, 1 is center or true, 2 is high
-        uint8_t CH9_flag            : 2; // 6, 7    // ch9 aux switch : 0 is low or false, 1 is center or true, 2 is high
-        uint8_t CH10_flag           : 2; // 8, 9    // ch10 aux switch : 0 is low or false, 1 is center or true, 2 is high
-        uint8_t CH11_flag           : 2; // 10,11   // ch11 aux switch : 0 is low or false, 1 is center or true, 2 is high
-        uint8_t CH12_flag           : 2; // 12,13   // ch12 aux switch : 0 is low or false, 1 is center or true, 2 is high
-    };
-    uint32_t value;
+struct {
+    uint8_t CH6_flag    : 2; // 0, 1    // ch6 aux switch : 0 is low or false, 1 is center or true, 2 is high
+    uint8_t CH7_flag    : 2; // 2, 3    // ch7 aux switch : 0 is low or false, 1 is center or true, 2 is high
+    uint8_t CH8_flag    : 2; // 4, 5    // ch8 aux switch : 0 is low or false, 1 is center or true, 2 is high
+    uint8_t CH9_flag    : 2; // 6, 7    // ch9 aux switch : 0 is low or false, 1 is center or true, 2 is high
+    uint8_t CH10_flag   : 2; // 8, 9    // ch10 aux switch : 0 is low or false, 1 is center or true, 2 is high
+    uint8_t CH11_flag   : 2; // 10,11   // ch11 aux switch : 0 is low or false, 1 is center or true, 2 is high
+    uint8_t CH12_flag   : 2; // 12,13   // ch12 aux switch : 0 is low or false, 1 is center or true, 2 is high
 } aux_con;
 
 void Copter::read_control_switch()
@@ -24,11 +19,11 @@ void Copter::read_control_switch()
 
     // calculate position of flight mode switch
     int8_t switch_position;
-    if      (g.rc_5.radio_in < 1231) switch_position = 0;
-    else if (g.rc_5.radio_in < 1361) switch_position = 1;
-    else if (g.rc_5.radio_in < 1491) switch_position = 2;
-    else if (g.rc_5.radio_in < 1621) switch_position = 3;
-    else if (g.rc_5.radio_in < 1750) switch_position = 4;
+    if      (g.rc_5.get_radio_in() < 1231) switch_position = 0;
+    else if (g.rc_5.get_radio_in() < 1361) switch_position = 1;
+    else if (g.rc_5.get_radio_in() < 1491) switch_position = 2;
+    else if (g.rc_5.get_radio_in() < 1621) switch_position = 3;
+    else if (g.rc_5.get_radio_in() < 1750) switch_position = 4;
     else switch_position = 5;
 
     // store time that switch last moved
@@ -86,23 +81,23 @@ bool Copter::check_if_auxsw_mode_used(uint8_t auxsw_mode_check)
 // check_duplicate_auxsw - Check to see if any Aux Switch Functions are duplicated
 bool Copter::check_duplicate_auxsw(void)
 {
-    bool ret = ((g.ch7_option != AUXSW_DO_NOTHING) && (g.ch7_option == g.ch8_option ||
-                g.ch7_option == g.ch9_option || g.ch7_option == g.ch10_option ||
-                g.ch7_option == g.ch11_option || g.ch7_option == g.ch12_option));
+    uint8_t auxsw_option_counts[AUXSW_SWITCH_MAX] = {};
+    auxsw_option_counts[g.ch7_option]++;
+    auxsw_option_counts[g.ch8_option]++;
+    auxsw_option_counts[g.ch9_option]++;
+    auxsw_option_counts[g.ch10_option]++;
+    auxsw_option_counts[g.ch11_option]++;
+    auxsw_option_counts[g.ch12_option]++;
 
-    ret = ret || ((g.ch8_option != AUXSW_DO_NOTHING) && (g.ch8_option == g.ch9_option ||
-                    g.ch8_option == g.ch10_option || g.ch8_option == g.ch11_option ||
-                    g.ch8_option == g.ch12_option));
-
-    ret = ret || ((g.ch9_option != AUXSW_DO_NOTHING) && (g.ch9_option == g.ch10_option ||
-                    g.ch9_option == g.ch11_option || g.ch9_option == g.ch12_option));
-
-    ret = ret || ((g.ch10_option != AUXSW_DO_NOTHING) && (g.ch10_option == g.ch11_option ||
-                    g.ch10_option == g.ch12_option));
-
-    ret = ret || ((g.ch11_option != AUXSW_DO_NOTHING) && (g.ch11_option == g.ch12_option));
-
-    return ret;
+    for (uint8_t i=0; i<sizeof(auxsw_option_counts); i++) {
+        if (i == AUXSW_DO_NOTHING) {
+            continue;
+        }
+        if (auxsw_option_counts[i] > 1) {
+            return true;
+        }
+    }
+   return false;
 }
 
 void Copter::reset_control_switch()
@@ -130,7 +125,7 @@ void Copter::read_aux_switches()
     }
 
     // check if ch7 switch has changed position
-    switch_position = read_3pos_switch(g.rc_7.radio_in);
+    switch_position = read_3pos_switch(g.rc_7.get_radio_in());
     if (aux_con.CH7_flag != switch_position) {
         // set the CH7 flag
         aux_con.CH7_flag = switch_position;
@@ -140,7 +135,7 @@ void Copter::read_aux_switches()
     }
 
     // check if Ch8 switch has changed position
-    switch_position = read_3pos_switch(g.rc_8.radio_in);
+    switch_position = read_3pos_switch(g.rc_8.get_radio_in());
     if (aux_con.CH8_flag != switch_position) {
         // set the CH8 flag
         aux_con.CH8_flag = switch_position;
@@ -150,7 +145,7 @@ void Copter::read_aux_switches()
     }
 
     // check if Ch9 switch has changed position
-    switch_position = read_3pos_switch(g.rc_9.radio_in);
+    switch_position = read_3pos_switch(g.rc_9.get_radio_in());
     if (aux_con.CH9_flag != switch_position) {
         // set the CH9 flag
         aux_con.CH9_flag = switch_position;
@@ -160,7 +155,7 @@ void Copter::read_aux_switches()
     }
 
     // check if Ch10 switch has changed position
-    switch_position = read_3pos_switch(g.rc_10.radio_in);
+    switch_position = read_3pos_switch(g.rc_10.get_radio_in());
     if (aux_con.CH10_flag != switch_position) {
         // set the CH10 flag
         aux_con.CH10_flag = switch_position;
@@ -170,7 +165,7 @@ void Copter::read_aux_switches()
     }
 
     // check if Ch11 switch has changed position
-    switch_position = read_3pos_switch(g.rc_11.radio_in);
+    switch_position = read_3pos_switch(g.rc_11.get_radio_in());
     if (aux_con.CH11_flag != switch_position) {
         // set the CH11 flag
         aux_con.CH11_flag = switch_position;
@@ -181,7 +176,7 @@ void Copter::read_aux_switches()
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4 || CONFIG_HAL_BOARD == HAL_BOARD_VRBRAIN
     // check if Ch12 switch has changed position
-    switch_position = read_3pos_switch(g.rc_12.radio_in);
+    switch_position = read_3pos_switch(g.rc_12.get_radio_in());
     if (aux_con.CH12_flag != switch_position) {
         // set the CH12 flag
         aux_con.CH12_flag = switch_position;
@@ -196,14 +191,14 @@ void Copter::read_aux_switches()
 void Copter::init_aux_switches()
 {
     // set the CH7 ~ CH12 flags
-    aux_con.CH7_flag = read_3pos_switch(g.rc_7.radio_in);
-    aux_con.CH8_flag = read_3pos_switch(g.rc_8.radio_in);
-    aux_con.CH10_flag = read_3pos_switch(g.rc_10.radio_in);
-    aux_con.CH11_flag = read_3pos_switch(g.rc_11.radio_in);
+    aux_con.CH7_flag = read_3pos_switch(g.rc_7.get_radio_in());
+    aux_con.CH8_flag = read_3pos_switch(g.rc_8.get_radio_in());
+    aux_con.CH10_flag = read_3pos_switch(g.rc_10.get_radio_in());
+    aux_con.CH11_flag = read_3pos_switch(g.rc_11.get_radio_in());
 
     // ch9, ch12 only supported on some boards
-    aux_con.CH9_flag = read_3pos_switch(g.rc_9.radio_in);
-    aux_con.CH12_flag = read_3pos_switch(g.rc_12.radio_in);
+    aux_con.CH9_flag = read_3pos_switch(g.rc_9.get_radio_in());
+    aux_con.CH12_flag = read_3pos_switch(g.rc_12.get_radio_in());
 
     // initialise functions assigned to switches
     init_aux_switch_function(g.ch7_option, aux_con.CH7_flag);
@@ -222,9 +217,8 @@ void Copter::init_aux_switch_function(int8_t ch_option, uint8_t ch_flag)
     // init channel options
     switch(ch_option) {
         case AUXSW_SIMPLE_MODE:
-        case AUXSW_SONAR:
+        case AUXSW_RANGEFINDER:
         case AUXSW_FENCE:
-        case AUXSW_RESETTOARMEDYAW:
         case AUXSW_SUPERSIMPLE_MODE:
         case AUXSW_ACRO_TRAINER:
         case AUXSW_EPM:
@@ -278,7 +272,7 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
             break;
 
         case AUXSW_SAVE_TRIM:
-            if ((ch_flag == AUX_SWITCH_HIGH) && (control_mode <= ACRO) && (channel_throttle->control_in == 0)) {
+            if ((ch_flag == AUX_SWITCH_HIGH) && (control_mode <= ACRO) && (channel_throttle->get_control_in() == 0)) {
                 save_trim();
             }
             break;
@@ -293,7 +287,7 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
                 }
 
                 // do not allow saving the first waypoint with zero throttle
-                if((mission.num_commands() == 0) && (channel_throttle->control_in == 0)){
+                if((mission.num_commands() == 0) && (channel_throttle->get_control_in() == 0)){
                     return;
                 }
 
@@ -322,7 +316,7 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
                 cmd.content.location = current_loc;
 
                 // if throttle is above zero, create waypoint command
-                if(channel_throttle->control_in > 0) {
+                if(channel_throttle->get_control_in() > 0) {
                     cmd.id = MAV_CMD_NAV_WAYPOINT;
                 }else{
                     // with zero throttle, create LAND command
@@ -345,13 +339,13 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
             break;
 #endif
 
-        case AUXSW_SONAR:
-            // enable or disable the sonar
-#if CONFIG_SONAR == ENABLED
-            if (ch_flag == AUX_SWITCH_HIGH) {
-                sonar_enabled = true;
+        case AUXSW_RANGEFINDER:
+            // enable or disable the rangefinder
+#if RANGEFINDER_ENABLED == ENABLED
+            if ((ch_flag == AUX_SWITCH_HIGH) && (rangefinder.num_sensors() >= 1)) {
+                rangefinder_state.enabled = true;
             }else{
-                sonar_enabled = false;
+                rangefinder_state.enabled = false;
             }
 #endif
             break;
@@ -368,14 +362,6 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
             }
             break;
 #endif
-        // To-Do: add back support for this feature
-        //case AUXSW_RESETTOARMEDYAW:
-        //    if (ch_flag == AUX_SWITCH_HIGH) {
-        //        set_yaw_mode(YAW_RESETTOARMEDYAW);
-        //    }else{
-        //        set_yaw_mode(YAW_HOLD);
-        //    }
-        //    break;
 
         case AUXSW_ACRO_TRAINER:
             switch(ch_flag) {
@@ -565,17 +551,7 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
         case AUXSW_MOTOR_INTERLOCK:
             // Turn on when above LOW, because channel will also be used for speed
             // control signal in tradheli
-            motors.set_interlock(ch_flag == AUX_SWITCH_HIGH || ch_flag == AUX_SWITCH_MIDDLE);
-
-            // remember the current value of the motor interlock so that this condition can be restored if we exit the throw mode early
-            throw_early_exit_interlock = motors.get_interlock();
-
-            // Log new status
-            if (motors.get_interlock()){
-                Log_Write_Event(DATA_MOTORS_INTERLOCK_ENABLED);
-            } else {
-                Log_Write_Event(DATA_MOTORS_INTERLOCK_DISABLED);
-            }
+            ap.motor_interlock_switch = (ch_flag == AUX_SWITCH_HIGH || ch_flag == AUX_SWITCH_MIDDLE);
             break;
 
         case AUXSW_BRAKE:
@@ -601,6 +577,17 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
                 }
             }
             break;
+
+        case AUXSW_AVOID_ADSB:
+            // enable or disable AP_Avoidance
+            if (ch_flag == AUX_SWITCH_HIGH) {
+                avoidance_adsb.enable();
+                Log_Write_Event(DATA_AVOIDANCE_ADSB_ENABLE);
+            }else{
+                avoidance_adsb.disable();
+                Log_Write_Event(DATA_AVOIDANCE_ADSB_DISABLE);
+            }
+            break;
     }
 }
 
@@ -608,8 +595,8 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
 void Copter::save_trim()
 {
     // save roll and pitch trim
-    float roll_trim = ToRad((float)channel_roll->control_in/100.0f);
-    float pitch_trim = ToRad((float)channel_pitch->control_in/100.0f);
+    float roll_trim = ToRad((float)channel_roll->get_control_in()/100.0f);
+    float pitch_trim = ToRad((float)channel_pitch->get_control_in()/100.0f);
     ahrs.add_trim(roll_trim, pitch_trim);
     Log_Write_Event(DATA_SAVE_TRIM);
     gcs_send_text(MAV_SEVERITY_INFO, "Trim saved");
@@ -626,10 +613,10 @@ void Copter::auto_trim()
         AP_Notify::flags.save_trim = true;
 
         // calculate roll trim adjustment
-        float roll_trim_adjustment = ToRad((float)channel_roll->control_in / 4000.0f);
+        float roll_trim_adjustment = ToRad((float)channel_roll->get_control_in() / 4000.0f);
 
         // calculate pitch trim adjustment
-        float pitch_trim_adjustment = ToRad((float)channel_pitch->control_in / 4000.0f);
+        float pitch_trim_adjustment = ToRad((float)channel_pitch->get_control_in() / 4000.0f);
 
         // add trim to ahrs object
         // save to eeprom on last iteration

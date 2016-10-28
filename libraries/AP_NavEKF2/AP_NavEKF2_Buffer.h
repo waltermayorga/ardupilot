@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 // EKF Buffer models
 
 // this buffer model is to be used for observation buffers,
@@ -113,7 +111,7 @@ private:
 };
 
 
-// Folowing buffer model is for IMU data,
+// Following buffer model is for IMU data,
 // it achieves a distance of sample size
 // between youngest and oldest
 template <typename element_type>

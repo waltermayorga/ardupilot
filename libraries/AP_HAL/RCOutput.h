@@ -25,6 +25,7 @@
 #define CH_16 15
 #define CH_17 16
 #define CH_18 17
+#define CH_NONE 255
 #endif
 
 
@@ -51,20 +52,14 @@ public:
      * Delay subsequent calls to write() going to the underlying hardware in
      * order to group related writes together. When all the needed writes are
      * done, call push() to commit the changes.
-     *
-     * This method is optional: if the subclass doesn't implement it all calls
-     * to write() are synchronous.
      */
-    virtual void     cork() { }
+    virtual void     cork() = 0;
 
     /*
      * Push pending changes to the underlying hardware. All changes between a
      * call to cork() and push() are pushed together in a single transaction.
-     *
-     * This method is optional: if the subclass doesn't implement it all calls
-     * to write() are synchronous.
      */
-    virtual void     push() { }
+    virtual void     push() = 0;
 
     /* Read back current output state, as either single channel or
      * array of channels. On boards that have a separate IO controller,
@@ -99,6 +94,11 @@ public:
       force the safety switch off, enabling PWM output from the IO board
      */
     virtual void     force_safety_off(void) {}
+
+    /*
+      If we support async sends (px4), this will force it to be serviced immediately
+     */
+    virtual void     force_safety_no_wait(void) {}
 
     /*
       setup scaling of ESC output for ESCs that can output a
